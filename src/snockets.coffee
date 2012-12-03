@@ -181,51 +181,6 @@ module.exports = class Snockets
 
         q.finalize()
 
-    # require = (relPath) =>
-    #   q.waitFor relName = stripExt relPath
-    #   if relName.match EXPLICIT_PATH
-    #     depPath = relName + '.js'
-    #     q.perform relName, depPath
-    #   else
-    #     depName = @joinPath path.dirname(filePath), relName
-    #     @findMatchingFile depName, flags, (err, depPath) ->
-    #       return callback err if err
-    #       q.perform relName, depPath
-
-    # requireTree = (dirName) =>
-    #   q.waitFor dirName
-    #   @readdir @absPath(dirName), flags, (err, items) =>
-    #     return callback err if err
-    #     q.unwaitFor dirName
-    #     for item in items.sort()
-    #       itemPath = @joinPath dirName, item
-    #       continue if @absPath(itemPath) is @absPath(filePath)
-    #       q.waitFor itemPath
-    #       do (itemPath) =>
-    #         @stat @absPath(itemPath), flags, (err, stats) =>
-    #           return callback err if err
-    #           if stats.isFile()
-    #             q.perform itemPath, itemPath
-    #           else
-    #             requireTree itemPath
-    #             q.unwaitFor itemPath
-
-    # @readFile filePath, flags, (err, fileChanged) =>
-    #   return callback err if err
-    #   if fileChanged then graphChanged = true
-    #   for directive in parseDirectives(@cache[filePath].data.toString 'utf8')
-    #     words = directive.replace(/['"]/g, '').split /\s+/
-    #     [command, relPaths...] = words
-
-    #     switch command
-    #       when 'require'
-    #         require relPath for relPath in relPaths
-    #       when 'require_tree'
-    #         for relPath in relPaths
-    #           requireTree @joinPath path.dirname(filePath), relPath
-
-    #   q.finalize()
-
   # Searches for a file with the given name (no extension, e.g. `'foo/bar'`)
   findMatchingFile: (filename, flags, callback) ->
     tryFiles = (filePaths) =>
