@@ -7,6 +7,7 @@ fs           = require 'fs'
 path         = require 'path'
 uglify       = require 'uglify-js'
 _            = require 'underscore'
+async        = require 'async'
 
 module.exports = class Snockets
   constructor: (@options = {}) ->
@@ -121,50 +122,63 @@ module.exports = class Snockets
           @concatCache[filePath] = null
         callback null, graphChanged
 
-    require = (relPath) =>
+    require = (relPath, done) =>
       q.waitFor relName = stripExt relPath
+
       if relName.match EXPLICIT_PATH
         depPath = relName + '.js'
-        q.perform relName, depPath
-      else
-        depName = @joinPath path.dirname(filePath), relName
-        @findMatchingFile depName, flags, (err, depPath) ->
-          return callback err if err
-          q.perform relName, depPath
+        return q.task depPath, done
 
-    requireTree = (dirName) =>
-      q.waitFor dirName
+      depName = @joinPath path.dirname(filePath), relName
+      @findMatchingFile depName, flags, (err, depPath) ->
+        return done err if err
+
+        q.task depPath, done
+
+    requireTree = (dirName, done) =>
       @readdir @absPath(dirName), flags, (err, items) =>
-        return callback err if err
-        q.unwaitFor dirName
-        for item in items.sort()
+        return done err if err
+        
+        items = items.sort()
+
+        async.forEachSeries items, (item, next) =>
           itemPath = @joinPath dirName, item
-          continue if @absPath(itemPath) is @absPath(filePath)
-          q.waitFor itemPath
-          do (itemPath) =>
-            @stat @absPath(itemPath), flags, (err, stats) =>
-              return callback err if err
-              if stats.isFile()
-                q.perform itemPath, itemPath
-              else
-                requireTree itemPath
-                q.unwaitFor itemPath
+
+          if @absPath(itemPath) is @absPath(filePath)
+            return next()
+
+          @stat @absPath(itemPath), flags, (err, stats) =>
+            return next err if err
+
+            if stats.isFile()
+              q.task itemPath, next
+            else
+              requireTree itemPath, next
+        , (err) ->
+          return done err if err
 
     @readFile filePath, flags, (err, fileChanged) =>
       return callback err if err
       if fileChanged then graphChanged = true
-      for directive in parseDirectives(@cache[filePath].data.toString 'utf8')
+      directives = parseDirectives(@cache[filePath].data.toString 'utf8')
+      async.forEachSeries directives, (directive, next) =>
         words = directive.replace(/['"]/g, '').split /\s+/
         [command, relPaths...] = words
 
         switch command
           when 'require'
-            require relPath for relPath in relPaths
+            async.forEachSeries relPaths, (path, next) ->
+              require path next
+            , next
           when 'require_tree'
-            for relPath in relPaths
-              requireTree @joinPath path.dirname(filePath), relPath
+            async.forEachSeries relPaths, (path, next) ->
+              requireTree @joinPath path.dirname(path), path, next
+            , next
+      , (err) ->
+        return callback err if err
 
-      q.finalize()
+        q.finalize()
+        
 
   # Searches for a file with the given name (no extension, e.g. `'foo/bar'`)
   findMatchingFile: (filename, flags, callback) ->
